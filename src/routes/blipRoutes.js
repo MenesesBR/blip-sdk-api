@@ -62,7 +62,7 @@ router.post('/messages', (req, res) => {
     MessageService.processMessageSend(req.body);
     logger.info(`Message received: ${JSON.stringify(req.body)}`);
 
-    return res.status(200);
+    return res.status(200).json({});
 });
 
 /**
