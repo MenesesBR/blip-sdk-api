@@ -59,8 +59,8 @@ const MessageService = require('../core/services/message/MessageService');
  */
 router.post('/messages', (req, res) => {
     // Here will be implemented the integration with BLIP SDK
-    MessageService.processMessageSend(req.body);
     res.status(200);
+    MessageService.processMessageSend(req.body);
     logger.info(`Message received: ${JSON.stringify(req.body)}`);
 });
 
