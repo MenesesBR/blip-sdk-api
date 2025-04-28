@@ -11,9 +11,8 @@ class BlipMessageService {
         this.receivedMessagesBotsData = new Map();
     }
 
-    async initializeClient(userId, userPassword, botId, userPhoneNumber, userDomain, userIdWithDomain) {
+    async initializeClient(userId, userPassword, botId, userPhoneNumber) {
         try {
-
             if (this.clients.has(userId)) {
                 logger.info(`Client already initialized for ${userId}`);
                 return this.clients.get(userId);
@@ -22,20 +21,8 @@ class BlipMessageService {
             logger.info(`Connecting user: ${userId} with bot_id: ${botId}`);
             let client = this.blipClient.createClient(userId, userPassword);
 
-            this.messageReceiver(client, userId, userPhoneNumber);
+            await this.connectClient(client, userId, botId, userPhoneNumber);
 
-            // Adiciona listener para mensagens recebidas do BLIP
-            try {
-                // Conecta o cliente
-                await client.connect();
-                logger.info(`BLIP client connected for ${userId} with bot_id: ${botId}`);
-            } catch (error) {
-                logger.info(`Error connecting BLIP client for ${userId}:`, error);
-                client = await this.blipClient.connectAsGuest(userId, userPassword, client);
-                this.messageReceiver(client, userId, userPhoneNumber);
-            }
-
-            // Armazena o cliente e retorna também o botId
             this.clients.set(userId, { client, botId });
             return { client, botId };
         } catch (error) {
@@ -44,12 +31,26 @@ class BlipMessageService {
         }
     }
 
-    async messageReceiver(client, userId, userPhoneNumber) {
+    async connectClient(client, userId, botId, userPhoneNumber) {
+        try {
+            await client.connect();
+            logger.info(`BLIP client connected for ${userId} with bot_id: ${botId}`);
+        } catch (error) {
+            logger.info(`Error connecting BLIP client for ${userId}:`, error);
+            client = await this.blipClient.connectAsGuest(userId, userPassword, client);
+            logger.info(`Guest connection established for ${userId}`);
+        } finally {
+            this.registerMessageReceiver(client, userId, userPhoneNumber);
+        }
+    }
+
+    registerMessageReceiver(client, userId, userPhoneNumber) {
         client.addMessageReceiver((message) => {
             if (message.type === 'application/vnd.lime.chatstate+json') {
                 logger.info('Received chat state change:', message);
                 return;
             }
+
             logger.info('Received message:', message);
             this.handleBlipResponse(message, userId, userPhoneNumber);
         });
@@ -58,7 +59,9 @@ class BlipMessageService {
     async handleBlipResponse(message, userId, userPhoneNumber) {
         try {
             logger.info(`Received message from BLIP for ${userId}:`, message);
-            const botData = this.receivedMessagesBotsData.get(message.from.split('@')[0]);
+
+            const sender = message.from?.split('@')[0];
+            const botData = this.receivedMessagesBotsData.get(sender);
 
             await messageProcessor.processMessage(message, userPhoneNumber, botData);
             this.messageQueue.delete(userId);
@@ -69,37 +72,22 @@ class BlipMessageService {
 
     async sendMessage(content) {
         try {
-            this.receivedMessagesBotsData.set(content.blipBotId, { metaAuthToken: content.metaAuthToken, metaPhoneNumberId: content.metaPhoneNumberId });
-            const userIdWithDomain = `${content.userId}@${content.userDomain}`;
-            // Inicializa o cliente se necessário
-            const { client, botId } = await this.initializeClient(content.userId, content.userPassword, content.blipBotId, content.userPhoneNumber, content.userDomain, userIdWithDomain);
-            const message = content.message;
-            const { text, interactive } = message;
-            let messageText;
+            const { userId, userPassword, blipBotId, userPhoneNumber, userDomain, message } = content;
+            const userIdWithDomain = `${userId}@${userDomain}`;
 
-            // Adiciona a mensagem à fila de espera
-            this.messageQueue.set(content.userId, {
-                message,
-                timestamp: Date.now()
+            this.receivedMessagesBotsData.set(blipBotId, {
+                metaAuthToken: content.metaAuthToken,
+                metaPhoneNumberId: content.metaPhoneNumberId
             });
 
-            if (interactive) {
-                if (interactive.type === 'button_reply') {
-                    messageText = interactive.button_reply.title;
-                    logger.info(`Selected button: ${messageText}`);
-                } else if (interactive.type === 'list_reply') {
-                    messageText = interactive.list_reply.title;
-                    logger.info(`Selected item: ${messageText}`);
-                }
-            } else if (text) {
-                messageText = text.body;
-            }
+            const { client, botId } = await this.initializeClient(userId, userPassword, blipBotId, userPhoneNumber, userDomain, userIdWithDomain);
 
-            if (!messageText) {
-                return;
-            }
+            this.messageQueue.set(userId, { message, timestamp: Date.now() });
 
-            logger.info(`Sending message to BLIP for user ${content.userId}:`, messageText);
+            const messageText = this.extractMessageText(message);
+            if (!messageText) return;
+
+            logger.info(`Sending message to BLIP for user ${userId}:`, messageText);
 
             const blipMessage = {
                 id: uuidv4(),
@@ -111,18 +99,35 @@ class BlipMessageService {
             await client.sendMessage(blipMessage);
             logger.info('Message sent successfully to BLIP');
             return true;
+
         } catch (error) {
             logger.error('Error sending message to BLIP:', {
                 error: error.message,
                 stack: error.stack,
-                userId: userId,
-                phoneNumberId: phoneNumberId,
-                messageType: message.type,
-                messageContent: message.text?.body || message.interactive?.type
+                userId: content?.userId,
+                phoneNumberId: content?.metaPhoneNumberId,
+                messageType: content?.message?.type,
+                messageContent: content?.message?.text?.body || content?.message?.interactive?.type
             });
             return false;
         }
     }
+
+    extractMessageText(message) {
+        if (message.interactive) {
+            const { interactive } = message;
+            if (interactive.type === 'button_reply') {
+                logger.info(`Selected button: ${interactive.button_reply.title}`);
+                return interactive.button_reply.title;
+            } else if (interactive.type === 'list_reply') {
+                logger.info(`Selected item: ${interactive.list_reply.title}`);
+                return interactive.list_reply.title;
+            }
+        } else if (message.text) {
+            return message.text.body;
+        }
+        return null;
+    }
 }
 
-module.exports = new BlipMessageService(); 
+module.exports = new BlipMessageService();

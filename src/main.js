@@ -50,5 +50,4 @@ app.use((err, req, res, next) => {
 
 app.listen(port, '::',() => {
     logger.info(`Server is running on port ${port}`);
-    logger.info(`Swagger documentation available at http://localhost:${port}/api-docs`);
 }); 

@@ -1,7 +1,6 @@
 const logger = require('../../../config/logger');
 const blipMessageService = require('../blip/BlipMessageService');
 const messageProcessor = require('./MessageProcessor');
-const { v4: uuidv4 } = require('uuid');
 
 class MessageService {
     constructor() {
