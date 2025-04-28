@@ -1,6 +1,7 @@
 const logger = require('../../../config/logger');
 const blipMessageService = require('../blip/BlipMessageService');
 const messageProcessor = require('./MessageProcessor');
+const { v4: uuidv4 } = require('uuid');
 
 class MessageService {
     constructor() {
@@ -9,6 +10,7 @@ class MessageService {
     async processMessageSend(content) {
         try {
             logger.log(`Starting message processing for ${content}`);
+
             // Envia a mensagem para o BLIP
             const success = await blipMessageService.sendMessage(content);
             

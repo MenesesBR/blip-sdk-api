@@ -11,32 +11,29 @@ class BlipMessageService {
         this.receivedMessagesBotsData = new Map();
     }
 
-    async initializeClient(userId, userPassword, botId, userPhoneNumber) {
+    async initializeClient(userId, userPassword, botId, userPhoneNumber, userDomain, userIdWithDomain) {
         try {
 
             if (this.clients.has(userId)) {
                 logger.info(`Client already initialized for ${userId}`);
                 return this.clients.get(userId);
             }
-            
-            // Se o usuário existe, conecta usando suas credenciais
-            logger.info(`Connecting user: ${userId} with bot_id: ${botId}`);
-            const client = this.blipClient.createClient(userId, userPassword);
 
+            logger.info(`Connecting user: ${userId} with bot_id: ${botId}`);
+            let client = this.blipClient.createClient(userId, userPassword);
+
+            this.messageReceiver(client, userId, userPhoneNumber);
 
             // Adiciona listener para mensagens recebidas do BLIP
-            client.addMessageReceiver((message) => {
-                if (message.type === 'application/vnd.lime.chatstate+json') {
-                    logger.info('Received chat state change:', message);
-                    return;
-                }
-                logger.info('Received message:', message);
-                this.handleBlipResponse(message, userId, userPhoneNumber);
-            });
-
-            // Conecta o cliente
-            await client.connect();
-            logger.info(`BLIP client connected for ${userId} with bot_id: ${botId}`);
+            try {
+                // Conecta o cliente
+                await client.connect();
+                logger.info(`BLIP client connected for ${userId} with bot_id: ${botId}`);
+            } catch (error) {
+                logger.info(`Error connecting BLIP client for ${userId}:`, error);
+                client = await this.blipClient.connectAsGuest(userId, userPassword, client);
+                this.messageReceiver(client, userId, userPhoneNumber);
+            }
 
             // Armazena o cliente e retorna também o botId
             this.clients.set(userId, { client, botId });
@@ -45,6 +42,17 @@ class BlipMessageService {
             logger.error('Error initializing BLIP client:', error);
             throw error;
         }
+    }
+
+    async messageReceiver(client, userId, userPhoneNumber) {
+        client.addMessageReceiver((message) => {
+            if (message.type === 'application/vnd.lime.chatstate+json') {
+                logger.info('Received chat state change:', message);
+                return;
+            }
+            logger.info('Received message:', message);
+            this.handleBlipResponse(message, userId, userPhoneNumber);
+        });
     }
 
     async handleBlipResponse(message, userId, userPhoneNumber) {
@@ -61,9 +69,10 @@ class BlipMessageService {
 
     async sendMessage(content) {
         try {
-            this.receivedMessagesBotsData.set(content.blipBotId, {metaAuthToken: content.metaAuthToken, metaPhoneNumberId: content.metaPhoneNumberId});
+            this.receivedMessagesBotsData.set(content.blipBotId, { metaAuthToken: content.metaAuthToken, metaPhoneNumberId: content.metaPhoneNumberId });
+            const userIdWithDomain = `${content.userId}@${content.userDomain}`;
             // Inicializa o cliente se necessário
-            const { client, botId } = await this.initializeClient(content.userId, content.userPassword, content.blipBotId, content.userPhoneNumber);
+            const { client, botId } = await this.initializeClient(content.userId, content.userPassword, content.blipBotId, content.userPhoneNumber, content.userDomain, userIdWithDomain);
             const message = content.message;
             const { text, interactive } = message;
             let messageText;

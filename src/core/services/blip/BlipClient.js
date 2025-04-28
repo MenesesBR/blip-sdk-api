@@ -1,7 +1,6 @@
 const BlipSdk = require('blip-sdk');
 const WebSocketTransport = require('lime-transport-websocket');
 const { v4: uuidv4 } = require('uuid');
-const config = require('../../../config/environment');
 const logger = require('../../../config/logger');
 
 class BlipClient {
@@ -13,10 +12,10 @@ class BlipClient {
         this.domain = "0mn.io";
     }
 
-    createClient(identity, password) {
-        logger.info(`Creating client for identity: ${identity}`);
+    createClient(userId, password) {
+        logger.info(`Creating client for identity: ${userId}`);
         return new BlipSdk.ClientBuilder()
-            .withIdentifier(identity)
+            .withIdentifier(userId)
             .withPassword(password)
             .withScheme(this.wsUriScheme)
             .withHostName(this.wsUriHostname)
@@ -41,12 +40,42 @@ class BlipClient {
             .build();
     }
 
-    generateRandomPassword() {
-        return Buffer.from(Math.random().toString()).toString('base64').slice(0, 8);
+    async connectAsGuest(userId, password) {
+        console.log('Iniciando conexão como guest...');
+        const guestIdentifier = uuidv4();
+        const guestNode = `${guestIdentifier}@${this.domain}/default`;
+
+        console.log(`Identidade gerada: ${userId}`);
+        console.log(`Guest identifier: ${guestIdentifier}`);
+
+        const guestClient = await this.createGuestClient(userId);
+        console.log('Conectando como guest...');
+        await guestClient.connectWithGuest(guestIdentifier);
+        console.log('Conexão guest estabelecida');
+
+        const createAccountCommand = {
+            id: uuidv4(),
+            from: userId,
+            pp: guestNode,
+            method: 'set',
+            type: 'application/vnd.lime.account+json',
+            uri: '/account',
+            resource: {
+                password: password
+            }
+        };
+
+        console.log('Criando conta...');
+        await guestClient.sendCommand(createAccountCommand);
+        console.log('Conta criada com sucesso');
+
+        const client = this.createClient(userId, password);
+        await client.connect();
+        return client;
     }
 
-    generateRandomIdentifier() {
-        return `${uuidv4()}.${config.blip.botId}`;
+    generateRandomPassword() {
+        return Buffer.from(Math.random().toString()).toString('base64').slice(0, 8);
     }
 }
 
