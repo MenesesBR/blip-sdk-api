@@ -8,7 +8,7 @@ const routes = require('./routes');
 const logger = require('./config/logger');
 
 const app = express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 3000;
 
 // Middlewares
 app.use(helmet());
@@ -48,7 +48,7 @@ app.use((err, req, res, next) => {
     });
 });
 
-app.listen(port, () => {
+app.listen(port, '::',() => {
     logger.info(`Server is running on port ${port}`);
     logger.info(`Swagger documentation available at http://localhost:${port}/api-docs`);
 }); 
