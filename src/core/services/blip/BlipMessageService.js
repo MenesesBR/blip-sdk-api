@@ -5,7 +5,6 @@ const messageProcessor = require('../message/MessageProcessor');
 
 class BlipMessageService {
     constructor() {
-        this.messageQueue = new Map();
         this.clients = new Map();
         this.blipClient = BlipClient;
         this.receivedMessagesBotsData = new Map();
@@ -64,7 +63,7 @@ class BlipMessageService {
             const botData = this.receivedMessagesBotsData.get(sender);
 
             await messageProcessor.processMessage(message, userPhoneNumber, botData);
-            this.messageQueue.delete(userId);
+
         } catch (error) {
             logger.error('Error handling BLIP response:', error);
         }
@@ -81,8 +80,6 @@ class BlipMessageService {
             });
 
             const { client, botId } = await this.initializeClient(userId, userPassword, blipBotId, userPhoneNumber, userDomain, userIdWithDomain);
-
-            this.messageQueue.set(userId, { message, timestamp: Date.now() });
 
             const messageText = this.extractMessageText(message);
             if (!messageText) return;

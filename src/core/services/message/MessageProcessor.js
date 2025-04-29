@@ -5,72 +5,179 @@ class MessageProcessor {
     async processMessage(message, userPhoneNumber, botData) {
         try {
             logger.info(`Processing message: ${JSON.stringify(message)}`);
-            
-            if (message.type === 'application/vnd.lime.select+json') {
-                await this.processSelectMessage(message, userPhoneNumber, botData);
-            } else if (message.type === 'text/plain') {
-                await this.processTextMessage(message, userPhoneNumber, botData);
-            } else {
-                logger.info(`Ignoring message of type: ${message.type}`);
-            }
+
+            const convertedMessage = this.messageConverter(message, userPhoneNumber);
+            await WhatsAppClient.sendMessage(convertedMessage, botData);
+            return true
+
         } catch (error) {
             logger.error('Error processing message', error);
             throw error;
         }
     }
 
-    async processSelectMessage(message, userPhoneNumber, botData) {
-        try {
-            logger.info(`Processing select message: ${JSON.stringify(message)}`);
-            
-            const text = message.content.text;
-            const options = message.content.options;
-            
-            if (!options || options.length === 0) {
-                logger.info('No options found in select message');
-                return;
-            }
-            
-            if (options.length <= 3) {
-                // Cria quick reply (botões)
-                const buttons = options.map(option => ({
-                    text: option.text
-                }));
-
-                await WhatsAppClient.sendInteractiveMessage(userPhoneNumber, text, buttons, botData);
-            } else {
-                // Cria lista
-                const listMessage = {
-                    title: text,
-                    description: 'Selecione uma opção',
-                    sections: [{
-                        title: 'Opções',
-                        items: options.map(option => ({
-                            title: option.text,
-                            next_step: option.text
-                        }))
-                    }]
-                };
-
-                await WhatsAppClient.sendListMessage(userPhoneNumber, text, listMessage);
-            }
-
-            return true;
-        } catch (error) {
-            logger.error('Error processing select message', error);
-            throw error;
+    messageConverter(blipMessage, toNumber) {
+        const base = {
+            messaging_product: "whatsapp",
+            to: toNumber
         }
-    }
 
-    async processTextMessage(message, userPhoneNumber, botData) {
-        try {
-            logger.info(`Processing text message: ${JSON.stringify(message)}`);
-            await WhatsAppClient.sendMessage(userPhoneNumber, message, botData);
-        } catch (error) {
-            logger.error('Error processing text message', error);
-            throw error;
+        switch (blipMessage.type) {
+            case "text/plain":
+                return {
+                    ...base,
+                    type: "text",
+                    text: {
+                        body: blipMessage.content
+                    }
+                }
+
+            case "application/vnd.lime.select+json":
+                if (blipMessage.content.options.length <= 3) {
+                    return {
+                        ...base,
+                        type: "interactive",
+                        interactive: {
+                            type: "button",
+                            body: {
+                                text: blipMessage.content.text || "Escolha uma opção:"
+                            },
+                            action: {
+                                buttons: blipMessage.content.options.map(opt => ({
+                                    type: "reply",
+                                    reply: {
+                                        id: String(opt.order || opt.text),
+                                        title: opt.text
+                                    }
+                                }))
+                            }
+                        }
+                    }
+                } else {
+                    return {
+                        ...base,
+                        type: "interactive",
+                        interactive: {
+                            type: "list",
+                            body: {
+                                text: blipMessage.content.text
+                            },
+                            action: {
+                                button: "Ver opções",
+                                sections: [
+                                    {
+                                        title: blipMessage.content.title || "Opções",
+                                        rows: blipMessage.content.options.map(item => ({
+                                            id: item.id || item.text,
+                                            title: item.text
+                                        }))
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+
+            case "application/vnd.lime.collection+json":
+                const items = blipMessage.content.items;
+                return {
+                    ...base,
+                    type: "interactive",
+                    interactive: {
+                        type: "list",
+                        body: {
+                            text: "Veja as opções abaixo:"
+                        },
+                        action: {
+                            button: "Ver opções",
+                            sections: items.map((item, index) => ({
+                                title: item.header?.value?.title || `Item ${index + 1}`,
+                                rows: item.options.map((opt, index) => ({
+                                    id: `Option ${index + 1}`,
+                                    title: opt.label.value
+                                }))
+                            }))
+                        }
+                    }
+                }
+
+            case "application/vnd.lime.media-link+json":
+                const media = blipMessage.content;
+                const mediaType = getMediaType(media.type);
+                if (!mediaType) throw new Error("Tipo de mídia não suportado");
+
+                return {
+                    ...base,
+                    type: mediaType,
+                    [mediaType]: {
+                        link: media.uri,
+                        caption: media.title || undefined
+                    }
+                }
+
+            case "application/vnd.lime.document+json":
+                // Pode conter imagens, vídeos ou arquivos com texto
+                const doc = blipMessage.content;
+                const subtype = getMediaType(doc.type);
+                if (!subtype) throw new Error("Tipo de documento não suportado");
+
+                return {
+                    ...base,
+                    type: subtype,
+                    [subtype]: {
+                        link: doc.uri,
+                        caption: doc.title || undefined
+                    }
+                }
+
+            case "application/vnd.lime.location+json":
+                const location = blipMessage.content;
+                return {
+                    ...base,
+                    type: "location",
+                    location: {
+                        latitude: location.latitude,
+                        longitude: location.longitude,
+                        name: location.text || undefined,
+                        address: location.text || undefined
+                    }
+                }
+
+            case "application/vnd.lime.web-link+json":
+                const link = blipMessage.content;
+                return {
+                    ...base,
+                    type: "interactive",
+                    interactive: {
+                        type: "button",
+                        body: {
+                            text: link.text || "Clique no botão abaixo para abrir o link."
+                        },
+                        action: {
+                            buttons: [
+                                {
+                                    type: "url",
+                                    url: link.uri,
+                                    title: "Abrir link"
+                                }
+                            ]
+                        }
+                    }
+                }
+
+            default:
+                throw new Error(`Tipo não suportado: ${blipMessage.type}`);
+        }
+
+        function getMediaType(mimeType) {
+            if (!mimeType) return null;
+            if (mimeType.startsWith("image/")) return "image";
+            if (mimeType.startsWith("audio/")) return "audio";
+            if (mimeType.startsWith("video/")) return "video";
+            if (mimeType === "application/pdf") return "document";
+            return null;
+
         }
     }
 }
-
 module.exports = new MessageProcessor(); 
