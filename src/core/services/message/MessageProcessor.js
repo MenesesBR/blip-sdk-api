@@ -106,29 +106,19 @@ class MessageProcessor {
                 const mediaType = getMediaType(media.type);
                 if (!mediaType) throw new Error("Tipo de mídia não suportado");
 
-                return {
+                let body = {
                     ...base,
                     type: mediaType,
                     [mediaType]: {
-                        link: media.uri,
-                        caption: media.title || undefined
+                        link: media.uri
                     }
                 }
 
-            case "application/vnd.lime.document+json":
-                // Pode conter imagens, vídeos ou arquivos com texto
-                const doc = blipMessage.content;
-                const subtype = getMediaType(doc.type);
-                if (!subtype) throw new Error("Tipo de documento não suportado");
-
-                return {
-                    ...base,
-                    type: subtype,
-                    [subtype]: {
-                        link: doc.uri,
-                        caption: doc.title || undefined
-                    }
+                if (media.title) {
+                    body[mediaType].caption = media.title;
                 }
+
+                return body
 
             case "application/vnd.lime.location+json":
                 const location = blipMessage.content;
@@ -144,23 +134,21 @@ class MessageProcessor {
                 }
 
             case "application/vnd.lime.web-link+json":
-                const link = blipMessage.content;
+                const content = blipMessage.content;
                 return {
                     ...base,
                     type: "interactive",
                     interactive: {
-                        type: "button",
+                        type: "cta_url",
                         body: {
-                            text: link.text || "Clique no botão abaixo para abrir o link."
+                            text: content.text
                         },
                         action: {
-                            buttons: [
-                                {
-                                    type: "url",
-                                    url: link.uri,
-                                    title: "Abrir link"
-                                }
-                            ]
+                            name: "cta_url",
+                            "parameters": {
+                                "display_text": content.title,
+                                "url": content.uri
+                            }
                         }
                     }
                 }
@@ -172,7 +160,8 @@ class MessageProcessor {
         function getMediaType(mimeType) {
             if (!mimeType) return null;
             if (mimeType.startsWith("image/")) return "image";
-            if (mimeType.startsWith("audio/")) return "audio";
+            if (mimeType.startsWith("sticker/")) return "sticker";
+            if (mimeType.startsWith("audio/") || mimeType.startsWith("voice/")) return "audio";
             if (mimeType.startsWith("video/")) return "video";
             if (mimeType === "application/pdf") return "document";
             return null;
