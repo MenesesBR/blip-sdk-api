@@ -194,6 +194,7 @@ class BlipMessageService {
             case "image": return "image/jpeg";
             case "video": return "video/mp4";
             case "audio": return "audio/ogg";
+            case "sticker": return "sticker/webp";
             case "document": return "application/pdf";
             default: return null;
         }
