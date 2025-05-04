@@ -10,5 +10,9 @@ module.exports = {
     },
     meta: {
         baseUrl: process.env.META_BASE_URL
+    },
+    bucket: {
+        baseUrl: process.env.BUCKET_URL,
+        apiKey: process.env.BUCKET_API_KEY,
     }
 }; 
