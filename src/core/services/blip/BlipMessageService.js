@@ -114,22 +114,6 @@ class BlipMessageService {
         }
     }
 
-    extractMessageText(message) {
-        if (message.interactive) {
-            const { interactive } = message;
-            if (interactive.type === 'button_reply') {
-                logger.info(`Selected button: ${interactive.button_reply.title}`);
-                return interactive.button_reply.title;
-            } else if (interactive.type === 'list_reply') {
-                logger.info(`Selected item: ${interactive.list_reply.title}`);
-                return interactive.list_reply.title;
-            }
-        } else if (message.text) {
-            return message.text.body;
-        }
-        return null;
-    }
-
     async messageConverter(metaMessage, metaAuthToken, blipBotId) {
         if (!metaMessage || !metaMessage.type) {
             throw new Error("Invalid message");
