@@ -146,6 +146,7 @@ class BlipMessageService {
             case "image":
             case "video":
             case "audio":
+            case "sticker":
             case "document":
                 const mediaContent = metaMessage[metaMessage.type];
                 return {
