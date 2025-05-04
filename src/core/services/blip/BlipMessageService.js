@@ -120,6 +120,11 @@ class BlipMessageService {
         }
 
         switch (metaMessage.type) {
+            case "application/json":
+                return {
+                    type: "application/json",
+                    content: metaMessage.content
+                }
             case "text":
                 return {
                     type: "text/plain",
