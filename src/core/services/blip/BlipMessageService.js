@@ -153,8 +153,8 @@ class BlipMessageService {
                     type: "application/vnd.lime.media-link+json",
                     content: {
                         uri: await this.getMetaMediaLink(mediaContent.id, metaAuthToken, blipBotId),
-                        type: mediaContent.mime_type
-                        //title: mediaContent.caption || undefined
+                        type: mediaContent.mime_type,
+                        title: mediaContent.caption || ""
                     }
                 }
 
@@ -171,17 +171,6 @@ class BlipMessageService {
 
             default:
                 throw new Error(`Tipo não suportado: ${metaMessage.type}`);
-        }
-    }
-
-    getMimeType(metaType) {
-        switch (metaType) {
-            case "image": return "image/jpeg";
-            case "video": return "video/mp4";
-            case "audio": return "audio/ogg";
-            case "sticker": return "sticker/webp";
-            case "document": return "application/pdf";
-            default: return null;
         }
     }
 
